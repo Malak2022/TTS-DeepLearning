@@ -1,0 +1,80 @@
+Abstract
+Deep learning breakthroughs have fundamentally transformed text-to-speech systems, allowing synthesized voice to approach human-like clarity and expressiveness. In this paper we detail the development, deployment, and assessment of a Tacotron 2 variant fed by the LJSpeech corpus. Our architecture employs a streamlined attention-driven encoder-decoder that converts character sequences to mel spectrograms, which are then resynthesized into waveforms using the Griffin-Lim algorithm. Evaluations reveal the architecture efficiently acquires time-alignment and trajectory modeling within the confines of modest hardware. Planned extensions target the integration of conditioned neural vocoders—specifically HiFi-GAN—for enhanced sample quality and the use of perceptual tests to deliver quality ratings that correlate firmly with human judgments.
+
+
+1. Introduction
+
+
+Text-to-Speech (TTS) synthesis pursues the task of converting written language into intelligible, human-like speech waveforms. Earlier approaches predominantly utilized large concatenative inventories or crafted parametric speech models, both of which delivered limited control of prosody and frequently produced synthetic signals strained by artifacts.
+
+Recent advances have leveraged deep neural architectures, resulting in a computationally guided departure from established paradigms. Fully end-to-end networks, epitomized by Tacotron, Tacotron 2, FastSpeech, and the various iterations of DeepVoice, have established superior benchmarks in both acoustic realism and appropriate temporal and intonational contour.
+
+We hereby document a compliant end-to-end Tacotron 2 pipeline, trained exclusively upon the LJSpeech corpus. The study aims to appraise the model’s compression of acoustic learning when executed on constrained low-resource hardware and to classify the resulting speech by alignment behavior and signal fidelity, with a particular emphasis on quantifying artifacts and prosodic congruence.
+
+2. Related Work
+
+Research in TTS has followed three pivotal technological eras:
+
+
+Concatenative TTS: Builds upon stitching together small, recorded speech units. Systems of this type yielded comprehensible output, yet their lack of granularity ultimately yielded inflexible, mechanical voices.
+
+
+Statistical Parametric TTS: Utilized Hidden Markov Models (HMMs) to statistically estimate fundamental speech parameters. Increased flexibility was countered by artifacts of oversmoothing, inhibiting the degree of natural expressiveness.
+
+
+Neural End-to-End TTS:
+
+
+Tacotron (2017):  Leveraged attentional encoder-decoder architectures to directly translate text into a spectrogram,8 significantly compressing the symbolic-to-waveform pipeline.
+
+
+Tacotron 2 (2018):  Further improved spectrogram fidelity through a residual convolutional post-net and external vocoding by embedding differentiable WaveNet.
+
+
+FastSpeech (2019): Replaced the sequential bottleneck with a transformer front-end and utilized duration prediction, enforcing parallelism for shortened synthesis latency.
+
+
+HiFi-GAN (2020): Developed a generative facial network capable of real-time, perceptually convincing waveform synthesis, collapsing the synthesis latency of traditional vocoding approaches.
+
+
+The present study embraces the third wave:  Tacotron 2 with the Griffin-Lim algorithm as an interim frontend, while conditioning the architecture for subsequent coupling with a HiFi-GAN backend.
+
+
+
+3. Methodology
+
+
+3.1 Dataset
+
+
+The LJSpeech corpus serves as our primary dataset, comprising 13,100  speech clips recorded by a single female voice, totaling roughly 24 hours. Preparatory steps involve:
+
+
+- Normalization of input text and encoding to a fixed-character set.
+
+- Transformation of time-domain audio to time-frequency representation as mel spectrograms.
+
+- Forced alignment of textual and acoustic segments to create paired sequences.
+
+
+
+3.2 Model Architecture
+
+The Tacotron 2 framework is organized into four complementary stages:
+
+Encoder: Maps input character sequences to continuous high-level embeddings via stacked convolution plus bidirectional LSTM layers.
+Attention: Computes progressive alignment weights that synchronize encoding and decoding spans, enabling accurate prosodic retrieval.
+Decoder: Generates mel spectrogram frames one timestep at a time, conditioned by encoder-computed context vectors.
+Postnet: Applies a deep convolution stack to enhance and denoise raw spectrogram predictions.
+3.3 Training Strategy
+
+Objective: Minimization of a composite loss that incorporates L1 spectrogram error and a binary gating term to regulate output length.
+Optimizer: Adaptive moment estimation with a time-varying learning rate conditioned on validation progress.
+Tracking: Real-time loss curves and attention heatmaps logged to TensorBoard.
+Saving: Periodic snapshot of model weights and configuration files.
+3.4 Inference
+
+At serve time, textual data is converted to mel spectrograms and subsequently synthetic audio is produced:
+
+Current backend: Griffin-Lim to invert spectrogram to waveforms.
+Planned enhancement: Replacement by a HiFi-GAN vocoder to boost perceptual fidelity.

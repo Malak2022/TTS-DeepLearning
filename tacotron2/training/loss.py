@@ -1,5 +1,9 @@
 """
 Loss functions for Tacotron2
+
+This module contains various loss functions used in the Tacotron2 text-to-speech model.
+The losses include mel spectrogram reconstruction loss, gate prediction loss, and
+attention alignment losses to encourage proper alignment during training.
 """
 
 import torch
@@ -10,6 +14,10 @@ class Tacotron2Loss(nn.Module):
     """
     Tacotron2 Loss Function
     Combines mel spectrogram loss and gate loss
+    
+    Args:
+        mel_loss_weight (float): Weight for the mel spectrogram loss component
+        gate_loss_weight (float): Weight for the gate loss component
     """
     def __init__(self, mel_loss_weight=1.0, gate_loss_weight=1.0):
         super(Tacotron2Loss, self).__init__()
@@ -45,6 +53,9 @@ class Tacotron2Loss(nn.Module):
 class MelSpectrogramLoss(nn.Module):
     """
     Mel spectrogram L1 loss
+    
+    This loss measures the L1 distance between predicted and target mel spectrograms.
+    It can be applied to both the pre- and post-net outputs.
     """
     def __init__(self):
         super(MelSpectrogramLoss, self).__init__()
@@ -54,12 +65,12 @@ class MelSpectrogramLoss(nn.Module):
         Calculate mel spectrogram loss
         
         Args:
-            mel_out: Predicted mel spectrogram
+            mel_out: Predicted mel spectrogram from the decoder
             mel_target: Target mel spectrogram
-            mel_out_postnet: Post-processed mel spectrogram (optional)
+            mel_out_postnet: Post-processed mel spectrogram from the postnet (optional)
             
         Returns:
-            mel_loss
+            mel_loss: L1 loss between predictions and targets
         """
         mel_loss = F.l1_loss(mel_out, mel_target)
         
@@ -72,6 +83,11 @@ class MelSpectrogramLoss(nn.Module):
 class GateLoss(nn.Module):
     """
     Gate prediction loss (binary cross entropy)
+    
+    This loss measures how well the model predicts the end of speech frames.
+    
+    Args:
+        pos_weight (Tensor, optional): A weight of positive examples to handle class imbalance
     """
     def __init__(self, pos_weight=None):
         super(GateLoss, self).__init__()
@@ -82,11 +98,11 @@ class GateLoss(nn.Module):
         Calculate gate loss
         
         Args:
-            gate_out: Predicted gate values
-            gate_target: Target gate values
+            gate_out: Predicted gate values (logits)
+            gate_target: Target gate values (binary)
             
         Returns:
-            gate_loss
+            gate_loss: Binary cross entropy loss
         """
         if self.pos_weight is not None:
             gate_loss = F.binary_cross_entropy_with_logits(
@@ -100,6 +116,9 @@ class GateLoss(nn.Module):
 class AttentionLoss(nn.Module):
     """
     Attention alignment loss to encourage monotonic attention
+    
+    This loss penalizes attention weights that violate the monotonic property
+    (i.e., attention that moves backward in the input sequence).
     """
     def __init__(self):
         super(AttentionLoss, self).__init__()
@@ -112,7 +131,7 @@ class AttentionLoss(nn.Module):
             alignments: Attention weights [B, T_out, T_in]
             
         Returns:
-            attention_loss
+            attention_loss: Penalty for non-monotonic attention
         """
         # Encourage monotonic attention by penalizing backward attention
         batch_size, max_time_out, max_time_in = alignments.size()
@@ -132,6 +151,12 @@ class AttentionLoss(nn.Module):
 class GuidedAttentionLoss(nn.Module):
     """
     Guided attention loss to encourage diagonal attention alignment
+    
+    This loss encourages the attention matrix to follow a diagonal pattern,
+    which is typical for speech synthesis where input and output are roughly aligned.
+    
+    Args:
+        sigma (float): Width of the Gaussian mask around the diagonal
     """
     def __init__(self, sigma=0.4):
         super(GuidedAttentionLoss, self).__init__()
@@ -147,7 +172,7 @@ class GuidedAttentionLoss(nn.Module):
             output_lengths: Output sequence lengths
             
         Returns:
-            guided_attention_loss
+            guided_attention_loss: Penalty for non-diagonal attention
         """
         batch_size, max_time_out, max_time_in = alignments.size()
         
@@ -175,6 +200,15 @@ class GuidedAttentionLoss(nn.Module):
 class CombinedLoss(nn.Module):
     """
     Combined loss function with multiple loss components
+    
+    This loss combines mel spectrogram loss, gate loss, and optional attention losses
+    into a single weighted loss function.
+    
+    Args:
+        mel_weight (float): Weight for mel spectrogram loss
+        gate_weight (float): Weight for gate loss
+        attention_weight (float): Weight for attention monotonicity loss
+        guided_attention_weight (float): Weight for guided attention loss
     """
     def __init__(self, mel_weight=1.0, gate_weight=1.0, attention_weight=0.1, guided_attention_weight=0.1):
         super(CombinedLoss, self).__init__()
@@ -195,11 +229,12 @@ class CombinedLoss(nn.Module):
         Args:
             model_output: Tuple of (mel_out, mel_out_postnet, gate_out, alignments)
             targets: Tuple of (mel_target, gate_target)
-            input_lengths: Input sequence lengths (optional)
-            output_lengths: Output sequence lengths (optional)
+            input_lengths: Input sequence lengths (optional, needed for guided attention)
+            output_lengths: Output sequence lengths (optional, needed for guided attention)
             
         Returns:
-            Dictionary of losses
+            Dictionary of losses with keys: total_loss, mel_loss, gate_loss, 
+            and optionally attention_loss and guided_attention_loss
         """
         mel_target, gate_target = targets
         mel_out, mel_out_postnet, gate_out, alignments = model_output
